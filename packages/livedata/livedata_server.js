@@ -403,57 +403,48 @@ _.extend(Session.prototype, {
     });
   },
 
-  // Destroy this session. Stop all processing and tear everything
-  // down. If a socket was attached, close it.
-  destroy: function () {
-    var self = this;
-
-    // Already destroyed.
-    if (!self.inQueue)
-      return;
-
-    if (self.heartbeat) {
-      self.heartbeat.stop();
-      self.heartbeat = null;
-    }
-
-    if (self.socket) {
-      self.socket.close();
-      self.socket._meteorSession = null;
-    }
-
-    // Drop the merge box data immediately.
-    self.collectionViews = {};
-    self.inQueue = null;
-
-    Package.facts && Package.facts.Facts.incrementServerFact(
-      "livedata", "sessions", -1);
-
-    Meteor.defer(function () {
-      // stop callbacks can yield, so we defer this on destroy.
-      // sub._isDeactivated() detects that we set inQueue to null and
-      // treats it as semi-deactivated (it will ignore incoming callbacks, etc).
-      self._deactivateAllSubscriptions();
-
-      // Defer calling the close callbacks, so that the caller closing
-      // the session isn't waiting for all the callbacks to complete.
-      _.each(self._closeCallbacks, function (callback) {
-        callback();
-      });
-    });
-  },
-
   // Destroy this session and unregister it at the server.
   close: function () {
     var self = this;
 
-    // Unconditionally destroy this session, even if it's not
-    // registered at the server.
-    self.destroy();
+    // Destroy this session, even if it's not registered at the
+    // server. Stop all processing and tear everything down. If a socket
+    // was attached, close it.
 
-    // Unregister the session.  This will also call `destroy`, but
-    // that's OK because `destroy` is idempotent.
-    self.server._closeSession(self);
+    if (self.inQueue) { // not already destroyed
+      if (self.heartbeat) {
+        self.heartbeat.stop();
+        self.heartbeat = null;
+      }
+
+      if (self.socket) {
+        self.socket.close();
+        self.socket._meteorSession = null;
+      }
+
+      // Drop the merge box data immediately.
+      self.collectionViews = {};
+      self.inQueue = null;
+
+      Package.facts && Package.facts.Facts.incrementServerFact(
+        "livedata", "sessions", -1);
+
+      Meteor.defer(function () {
+        // stop callbacks can yield, so we defer this on destroy.
+        // sub._isDeactivated() detects that we set inQueue to null and
+        // treats it as semi-deactivated (it will ignore incoming callbacks, etc).
+        self._deactivateAllSubscriptions();
+
+        // Defer calling the close callbacks, so that the caller closing
+        // the session isn't waiting for all the callbacks to complete.
+        _.each(self._closeCallbacks, function (callback) {
+          callback();
+        });
+      });
+    }
+
+    // Unregister the session.
+    self.server._removeSession(self);
   },
 
   // Send a message (doing nothing if no socket is connected right now.)
@@ -1326,11 +1317,10 @@ _.extend(Server.prototype, {
     }
   },
 
-  _closeSession: function (session) {
+  _removeSession: function (session) {
     var self = this;
     if (self.sessions[session.id]) {
       delete self.sessions[session.id];
-      session.destroy();
     }
   },
 
