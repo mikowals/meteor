@@ -28,6 +28,12 @@ if (Meteor.isServer) {
     dropInsecureCollection: function(name) {
       var c = COLLECTIONS[name];
       c._dropCollection();
+    },
+    wait: function (ms) {
+      var waitFn = function (cb) {
+        Meteor.setTimeout( function () { cb(null, true) }, ms);
+      };
+      return Meteor.wrapAsync(waitFn)();
     }
   });
 }
@@ -344,6 +350,18 @@ Tinytest.addAsync("mongo-livedata - basics, " + idGeneration, function (test, on
     return doc.x * 2;
   }, context), [2, 8]);
 
+  // order of execution changes on server when function yields
+  if (Meteor.isServer) {
+    index = 0;
+    test.equal(cur.map(function (doc, i, cursor) {
+      Meteor.call('wait', 10 / (1 + i));
+      test.equal(1 - i, index++);
+      test.isTrue(cursor === cur);
+      test.isTrue(context === this);
+      return doc.x * 2;
+    }, context), [2, 8]);
+  }
+  
   test.equal(_.pluck(coll.find({run: run}, {sort: {x: -1}}).fetch(), "x"),
              [4, 1]);
 

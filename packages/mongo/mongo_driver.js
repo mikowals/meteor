@@ -958,9 +958,15 @@ _.extend(SynchronousCursor.prototype, {
     var self = this;
     var res = [];
     self.forEach(function (doc, index) {
-      res.push(callback.call(thisArg, doc, index, self._selfForIteration));
+      var fut = new Future;
+      res.push(fut);
+      Future.task( function (){
+        fut.return(callback.call(thisArg, doc, index, self._selfForIteration));
+      }).detach();
     });
-    return res;
+
+    Future.wait(res);
+    return _.invoke(res, 'get');
   },
 
   _rewind: function () {
