@@ -852,7 +852,8 @@ MongoConnection.prototype._createSynchronousCursor = function(
   var mongoOptions = {
     sort: cursorOptions.sort,
     limit: cursorOptions.limit,
-    skip: cursorOptions.skip
+    skip: cursorOptions.skip,
+    batchSize: 50000
   };
 
   // Do we want a tailable cursor (which only works on capped collections)?
